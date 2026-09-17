@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getQueueTaskById } from "../../actions";
 import { notFound } from "next/navigation";
 import PrepareTaskClient from "./PrepareTaskClient";

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getCampaignById } from "../actions";
 import { getGenerationPreflight } from "@/app/creatives/actions";
 import { Button } from "@/components/ui/button";

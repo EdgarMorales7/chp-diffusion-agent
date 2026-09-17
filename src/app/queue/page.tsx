@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getQueueTasks } from "./actions";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

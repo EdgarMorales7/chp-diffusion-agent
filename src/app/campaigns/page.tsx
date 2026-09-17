@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getCampaigns } from "./actions";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";

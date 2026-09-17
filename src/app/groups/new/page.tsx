@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getGroupCategories, createGroup } from "../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

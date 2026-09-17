@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getCreativeById } from "../actions";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
