@@ -21,7 +21,8 @@ import {
   XCircle,
   ThumbsUp,
   Clock,
-  ClipboardCheck
+  ClipboardCheck,
+  Loader2
 } from "lucide-react";
 import Link from "next/link";
 import { 
@@ -42,6 +43,8 @@ export default function PrepareTaskClient({ task }: { task: any }) {
   const [approvedAt, setApprovedAt] = useState<string | null>(task.approved_at || null);
   
   const [copied, setCopied] = useState(false);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const [openedFb, setOpenedFb] = useState(Boolean(task.opened_at));
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -88,16 +91,24 @@ export default function PrepareTaskClient({ task }: { task: any }) {
   };
 
   const handleManualPrepare = async () => {
-    await ensurePrepared();
+    setIsPreparing(true);
+    try {
+      await ensurePrepared();
+    } finally {
+      setIsPreparing(false);
+    }
   };
 
   const handleApprove = async () => {
     setIsSubmitting(true);
-    const now = new Date().toISOString();
-    setApprovedAt(now);
-    setCurrentStatus('Approved');
-    await approveQueueTask(task.id);
-    setIsSubmitting(false);
+    try {
+      const now = new Date().toISOString();
+      setApprovedAt(now);
+      setCurrentStatus('Approved');
+      await approveQueueTask(task.id);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCopy = async () => {
@@ -106,33 +117,49 @@ export default function PrepareTaskClient({ task }: { task: any }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       setChecklist(prev => ({ ...prev, copy: true, cta: true }));
-      } catch (err) {
+    } catch (err) {
       console.error('Failed to copy', err);
     }
   };
 
   const handleDownload = async () => {
     if (task.creatives?.image_url) {
-      const a = document.createElement('a');
-      a.href = task.creatives.image_url;
-      a.download = `CHP_${task.campaigns?.name || 'Campaign'}_${task.id}.png`;
-      a.target = '_blank';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
-
-      setChecklist(prev => ({ ...prev, image: true }));
+      setIsDownloading(true);
+      try {
+        const res = await fetch(task.creatives.image_url);
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const sanitizedCampaign = (task.campaigns?.name || 'Campaign').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30);
+        a.download = `CHP_${sanitizedCampaign}_${task.id.slice(0, 8)}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } catch {
+        // Fallback: direct window open if cross-origin fetch is blocked
+        window.open(task.creatives.image_url, '_blank');
+      } finally {
+        setIsDownloading(false);
+        setChecklist(prev => ({ ...prev, image: true }));
+      }
     }
   };
 
   const handleOpenFb = async () => {
-    if (task.groups?.facebook_url) {
-      window.open(task.groups.facebook_url, '_blank', 'noopener,noreferrer');
-      setOpenedFb(true);
-      setChecklist(prev => ({ ...prev, group: true }));
-      await recordGroupOpened(task.id);
+    let url = task.groups?.facebook_url;
+    if (url) {
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = `https://${url}`;
+      }
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else {
+      window.open('https://www.facebook.com/groups', '_blank', 'noopener,noreferrer');
     }
+    setOpenedFb(true);
+    setChecklist(prev => ({ ...prev, group: true }));
+    await recordGroupOpened(task.id);
   };
 
   const handlePublish = async () => {
@@ -240,8 +267,9 @@ export default function PrepareTaskClient({ task }: { task: any }) {
         {/* Action Bar for Preparation & Approval */}
         <div className="flex flex-wrap items-center gap-2">
           {!preparedAt ? (
-            <Button onClick={handleManualPrepare} variant="outline" size="sm" className="gap-1.5 border-indigo-200 text-indigo-700 bg-indigo-50/50">
-              <ClipboardCheck className="w-4 h-4" /> Iniciar Preparación
+            <Button onClick={handleManualPrepare} disabled={isPreparing} variant="outline" size="sm" className="gap-1.5 border-indigo-200 text-indigo-700 bg-indigo-50/50">
+              {isPreparing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardCheck className="w-4 h-4" />}
+              {isPreparing ? "Preparando..." : "Iniciar Preparación"}
             </Button>
           ) : (
             <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200 py-1.5 px-3">
@@ -257,7 +285,8 @@ export default function PrepareTaskClient({ task }: { task: any }) {
               size="sm" 
               className="gap-1.5 border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
             >
-              <ThumbsUp className="w-4 h-4" /> Aprobar Publicación
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
+              {isSubmitting ? "Aprobando..." : "Aprobar Publicación"}
             </Button>
           )}
 
@@ -371,8 +400,9 @@ export default function PrepareTaskClient({ task }: { task: any }) {
             <CardHeader className="pb-3 border-b flex flex-row items-center justify-between">
               <CardTitle className="text-lg">Imagen</CardTitle>
               {task.creatives?.image_url && (
-                <Button onClick={handleDownload} variant="outline" size="sm" className="gap-2">
-                  <Download className="w-4 h-4" /> Descargar
+                <Button onClick={handleDownload} disabled={isDownloading} variant="outline" size="sm" className="gap-2">
+                  {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  {isDownloading ? "Descargando..." : "Descargar"}
                 </Button>
               )}
             </CardHeader>
@@ -382,8 +412,9 @@ export default function PrepareTaskClient({ task }: { task: any }) {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={task.creatives.image_url} alt="Creative" className="w-full h-auto object-cover" />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <Button onClick={handleDownload} variant="secondary" className="gap-2">
-                      <Download className="w-4 h-4" /> Descargar Imagen
+                    <Button onClick={handleDownload} disabled={isDownloading} variant="secondary" className="gap-2">
+                      {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                      {isDownloading ? "Descargando..." : "Descargar Imagen"}
                     </Button>
                   </div>
                 </div>
@@ -506,7 +537,15 @@ export default function PrepareTaskClient({ task }: { task: any }) {
                       className="w-full bg-emerald-600 hover:bg-emerald-700 text-white" 
                       disabled={isSubmitting}
                     >
-                      {isSubmitting ? "Guardando..." : <><CheckCircle className="h-4 w-4 mr-1.5" /> Publicada</>}
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Guardando...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="h-4 w-4 mr-1.5" /> Publicada
+                        </>
+                      )}
                     </Button>
                   </div>
                 </div>
