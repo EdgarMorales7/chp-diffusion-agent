@@ -31,10 +31,34 @@ export async function getCampaignById(id: string) {
 
   if (campaignRes.error) return null;
 
+  const rawBriefs = briefsRes.data || [];
+  const briefs = await Promise.all(
+    rawBriefs.map(async (b: any) => {
+      if (Array.isArray(b.creatives) && b.creatives.length > 0) {
+        const resolvedCreatives = await Promise.all(
+          b.creatives.map(async (c: any) => {
+            if (c.storage_path) {
+              const { data: signed } = await supabase
+                .storage
+                .from('creatives')
+                .createSignedUrl(c.storage_path, 3600);
+              if (signed?.signedUrl) {
+                return { ...c, image_url: signed.signedUrl };
+              }
+            }
+            return c;
+          })
+        );
+        return { ...b, creatives: resolvedCreatives };
+      }
+      return b;
+    })
+  );
+
   return {
     ...campaignRes.data,
     variants: variantsRes.data || [],
-    briefs: briefsRes.data || [],
+    briefs,
   };
 }
 

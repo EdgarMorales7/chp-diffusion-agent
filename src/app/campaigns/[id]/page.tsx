@@ -156,6 +156,41 @@ export default async function CampaignDetailPage(props: { params: Promise<{ id: 
                   </div>
                   <p className="text-xs text-muted-foreground">{b.visual_concept}</p>
                   
+                  {/* Previsualización de imágenes generadas para este brief */}
+                  {Array.isArray((b as Record<string, unknown>).creatives) && ((b as Record<string, unknown>).creatives as unknown[]).length > 0 && (
+                    <div className="space-y-2 pt-2">
+                      {((b as Record<string, unknown>).creatives as Record<string, unknown>[]).map((c) => (
+                        <div key={c.id as string} className="rounded-lg overflow-hidden border bg-muted/20 p-2 space-y-2">
+                          <div className="relative aspect-square w-full rounded-md overflow-hidden bg-black/5">
+                            {c.image_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img 
+                                src={c.image_url as string} 
+                                alt={b.visual_concept || "Creativo generado"} 
+                                className="object-cover w-full h-full hover:scale-105 transition-transform duration-300" 
+                              />
+                            ) : (
+                              <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
+                                Sin previsualización
+                              </div>
+                            )}
+                            <div className="absolute top-2 right-2">
+                              <Badge variant={c.status === 'Approved' ? 'default' : 'secondary'} className="text-[10px] shadow-sm">
+                                {(c.status as string) || 'Listo'}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="flex justify-between items-center text-[11px] text-muted-foreground px-0.5">
+                            <span>{(c.aspect_ratio as string) || '1:1'} • {(c.model as string)}</span>
+                            <Link href={`/creatives/${c.id}`} className="text-indigo-600 font-medium hover:underline">
+                              Ver detalle →
+                            </Link>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <GenerateImageButton
                     campaignId={campaign.id}
                     briefId={b.id}
