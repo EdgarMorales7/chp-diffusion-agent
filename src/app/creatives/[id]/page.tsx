@@ -6,7 +6,8 @@ import { ChevronLeft, Check, X } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 
-export default async function CreativePreviewPage({ params }: { params: { id: string } }) {
+export default async function CreativePreviewPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const creative = await getCreativeById(params.id);
 
   if (!creative) {

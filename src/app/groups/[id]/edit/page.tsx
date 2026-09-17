@@ -8,7 +8,8 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 
-export default async function EditGroupPage({ params }: { params: { id: string } }) {
+export default async function EditGroupPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const [group, categories] = await Promise.all([
     getGroupById(params.id),
     getGroupCategories()

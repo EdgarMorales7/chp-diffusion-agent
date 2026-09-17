@@ -5,7 +5,8 @@ import Link from "next/link";
 import { ChevronLeft, ExternalLink, Settings, Plus } from "lucide-react";
 import { notFound } from "next/navigation";
 
-export default async function GroupDetailPage({ params }: { params: { id: string } }) {
+export default async function GroupDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const group = await getGroupById(params.id);
 
   if (!group) {
