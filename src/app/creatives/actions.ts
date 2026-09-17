@@ -246,14 +246,21 @@ export async function linkCreativeToPost(creativeId: string, variantId: string) 
   revalidatePath(`/creatives/${creativeId}`);
 }
 
-export async function updateCreativeStatus(id: string, status: string) {
-  const supabase = createAdminClient();
-  const { error } = await supabase.from('creatives').update({ status }).eq('id', id);
+export async function updateCreativeStatus(id: string, status: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = createAdminClient();
+    const { error } = await supabase.from('creatives').update({ status }).eq('id', id);
 
-  if (error) {
-    throw new Error('Failed to update creative status');
+    if (error) {
+      console.error('[CreativeEngine] Error actualizando estado:', error);
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath(`/creatives/${id}`);
+    revalidatePath('/creatives');
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Error inesperado al actualizar el estado';
+    return { success: false, error: message };
   }
-
-  revalidatePath(`/creatives/${id}`);
-  revalidatePath('/creatives');
 }

@@ -1,10 +1,10 @@
-import { getCreativeById, updateCreativeStatus } from "../actions";
+import { getCreativeById } from "../actions";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { ChevronLeft, Check, X } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
+import { CreativeStatusActions } from "./CreativeStatusActions";
 
 export default async function CreativePreviewPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -13,10 +13,6 @@ export default async function CreativePreviewPage(props: { params: Promise<{ id:
   if (!creative) {
     notFound();
   }
-
-  // Bind actions
-  const approve = updateCreativeStatus.bind(null, creative.id, 'Approved');
-  const reject = updateCreativeStatus.bind(null, creative.id, 'Rejected');
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-12">
@@ -28,22 +24,12 @@ export default async function CreativePreviewPage(props: { params: Promise<{ id:
             </Button>
           </Link>
           <h1 className="text-2xl font-bold">Vista Previa del Creativo</h1>
-          <Badge variant={creative.status === 'Approved' ? 'default' : 'secondary'}>
-            {creative.status}
-          </Badge>
         </div>
-        <div className="flex gap-2">
-          <form action={reject}>
-            <Button variant="outline" className="gap-2 text-red-600 hover:text-red-700">
-              <X className="h-4 w-4" /> Rechazar
-            </Button>
-          </form>
-          <form action={approve}>
-            <Button className="gap-2 bg-green-600 hover:bg-green-700 text-white">
-              <Check className="h-4 w-4" /> Aprobar
-            </Button>
-          </form>
-        </div>
+
+        <CreativeStatusActions 
+          creativeId={creative.id} 
+          initialStatus={creative.status} 
+        />
       </div>
 
       <div className="grid md:grid-cols-2 gap-8">
