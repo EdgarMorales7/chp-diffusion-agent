@@ -245,7 +245,57 @@ export class ImageGenerationProvider {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('[ImageGenerationProvider] Error en API:', errorData);
+        console.error(`[ImageGenerationProvider] Error en API con modelo ${model}:`, errorData);
+
+        // Intento de fallback automático a dall-e-3 si el modelo moderno falla o no está disponible en la cuenta
+        if (model !== 'dall-e-3') {
+          console.warn('[ImageGenerationProvider] Reintentando con modelo fallback dall-e-3...');
+          try {
+            const fallbackPayload = {
+              model: 'dall-e-3',
+              prompt: options.prompt,
+              n: 1,
+              size: '1024x1024',
+              response_format: 'b64_json',
+            };
+            const fallbackResponse = await fetch('https://api.openai.com/v1/images/generations', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify(fallbackPayload),
+            });
+
+            if (fallbackResponse.ok) {
+              const fbData = await fallbackResponse.json();
+              if (fbData.data && fbData.data[0]) {
+                const b64 = fbData.data[0].b64_json;
+                const buf = b64 ? Buffer.from(b64, 'base64') : Buffer.from([]);
+                return {
+                  imageUrl: b64 ? `data:image/png;base64,${b64}` : (fbData.data[0].url || ''),
+                  imageBuffer: buf,
+                  provider: 'openai',
+                  model: 'dall-e-3',
+                  prompt: options.prompt,
+                  requestedSize: '1024x1024',
+                  requestedQuality: 'standard',
+                  aspectRatio: '1:1',
+                  estimatedCost: 0.04,
+                  actualUsage: null,
+                  costNote: 'Generado con fallback automático DALL-E 3',
+                  createdAt: new Date().toISOString(),
+                };
+              }
+            } else {
+              const fbErrData = await fallbackResponse.json().catch(() => ({}));
+              console.error('[ImageGenerationProvider] Error en fallback dall-e-3:', fbErrData);
+            }
+          } catch (fbErr) {
+            console.error('[ImageGenerationProvider] Excepción en fallback dall-e-3:', fbErr);
+          }
+        }
+
         const errMsg = errorData.error?.message || `Error HTTP ${response.status}: ${response.statusText}`;
         throw new Error(`OpenAI API Error (${model}): ${errMsg}`);
       }

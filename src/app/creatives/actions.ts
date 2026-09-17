@@ -66,79 +66,106 @@ export async function getGenerationPreflight(aspectRatio: string = '1:1') {
  * Generates an image and uploads it to private Supabase Storage.
  * Generates signed URLs for admin display to avoid exposing permanent public URLs.
  */
-export async function generateCreative(campaignId: string, briefId: string, aspectRatio: string = '1:1', quality: string = 'standard') {
-  const supabase = createAdminClient();
+export async function generateCreative(
+  campaignId: string, 
+  briefId: string, 
+  aspectRatio: string = '1:1', 
+  quality: string = 'standard'
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = createAdminClient();
 
-  // Fetch brief and campaign details for product truth
-  const { data: brief, error: briefError } = await supabase
-    .from('creative_briefs')
-    .select('*, campaigns(product, customization, tone)')
-    .eq('id', briefId)
-    .single();
+    // 1. Fetch brief details directly
+    const { data: brief, error: briefError } = await supabase
+      .from('creative_briefs')
+      .select('*')
+      .eq('id', briefId)
+      .single();
 
-  if (briefError || !brief) throw new Error('Creative brief no encontrado');
+    if (briefError || !brief) {
+      console.error('[CreativeEngine] Creative brief no encontrado:', briefError);
+      return { success: false, error: 'Creative brief no encontrado en la base de datos' };
+    }
 
-  const brandTone = brief.campaigns?.tone || 'natural, professional commercial';
-  const finalPrompt = buildImagePrompt(brief, brandTone);
+    // 2. Fetch campaign details directly
+    const { data: campaign } = await supabase
+      .from('campaigns')
+      .select('product, customization, tone')
+      .eq('id', campaignId)
+      .single();
 
-  // Generate image through provider abstraction
-  const result = await imageProvider.generateImage({
-    prompt: finalPrompt,
-    aspectRatio,
-    quality,
-  });
+    const brandTone = campaign?.tone || 'natural, professional commercial';
+    const finalPrompt = buildImagePrompt(
+      { ...brief, customization: campaign?.customization, product_focus: brief.product_focus || campaign?.product }, 
+      brandTone
+    );
 
-  const fileName = `campaigns/${campaignId}/creatives/${briefId}_${Date.now()}.png`;
-
-  // Upload to private Supabase Storage
-  const { error: uploadError } = await supabase
-    .storage
-    .from('creatives')
-    .upload(fileName, result.imageBuffer, {
-      contentType: 'image/png',
-      upsert: false,
+    // 3. Generate image through provider abstraction (with automatic DALL-E 3 fallback)
+    const result = await imageProvider.generateImage({
+      prompt: finalPrompt,
+      aspectRatio,
+      quality,
     });
 
-  if (uploadError) {
-    console.error('[CreativeEngine] Error al subir imagen a Supabase Storage:', uploadError);
-    throw new Error('Fallo al almacenar el creativo en Storage');
+    const fileName = `campaigns/${campaignId}/creatives/${briefId}_${Date.now()}.png`;
+
+    // 4. Upload to private Supabase Storage
+    const { error: uploadError } = await supabase
+      .storage
+      .from('creatives')
+      .upload(fileName, result.imageBuffer, {
+        contentType: 'image/png',
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error('[CreativeEngine] Error al subir imagen a Supabase Storage:', uploadError);
+      return { 
+        success: false, 
+        error: `Error en Storage (bucket "creatives"): ${uploadError.message}. Verifica que el bucket exista.` 
+      };
+    }
+
+    // 5. Create time-limited signed URL for immediate preview (3600 seconds = 1 hour)
+    const { data: signedData } = await supabase
+      .storage
+      .from('creatives')
+      .createSignedUrl(fileName, 3600);
+
+    const initialDisplayUrl = signedData?.signedUrl || result.imageUrl;
+
+    // 6. Insert into creatives table with cost and usage tracking
+    const { error: dbError } = await supabase.from('creatives').insert({
+      campaign_id: campaignId,
+      creative_brief_id: briefId,
+      provider: result.provider,
+      model: result.model,
+      prompt: result.prompt,
+      image_url: initialDisplayUrl,
+      storage_path: fileName,
+      aspect_ratio: result.aspectRatio,
+      size: result.requestedSize,
+      requested_size: result.requestedSize,
+      requested_quality: result.requestedQuality,
+      estimated_cost: result.estimatedCost || 0,
+      actual_usage: result.actualUsage,
+      generation_cost: result.estimatedCost || 0,
+      status: 'Pending Approval',
+    });
+
+    if (dbError) {
+      console.error('[CreativeEngine] Error al registrar creativo en base de datos:', dbError);
+      return { success: false, error: `Error en BD al guardar creativo: ${dbError.message}` };
+    }
+
+    revalidatePath(`/campaigns/${campaignId}`);
+    revalidatePath('/creatives');
+    return { success: true };
+  } catch (error: unknown) {
+    console.error('[CreativeEngine] Error inesperado en generateCreative:', error);
+    const message = error instanceof Error ? error.message : 'Error inesperado al generar la imagen';
+    return { success: false, error: message };
   }
-
-  // Create time-limited signed URL for immediate preview (3600 seconds = 1 hour)
-  const { data: signedData } = await supabase
-    .storage
-    .from('creatives')
-    .createSignedUrl(fileName, 3600);
-
-  const initialDisplayUrl = signedData?.signedUrl || result.imageUrl;
-
-  // Insert into creatives table with cost and usage tracking
-  const { error: dbError } = await supabase.from('creatives').insert({
-    campaign_id: campaignId,
-    creative_brief_id: briefId,
-    provider: result.provider,
-    model: result.model,
-    prompt: result.prompt,
-    image_url: initialDisplayUrl,
-    storage_path: fileName,
-    aspect_ratio: result.aspectRatio,
-    size: result.requestedSize,
-    requested_size: result.requestedSize,
-    requested_quality: result.requestedQuality,
-    estimated_cost: result.estimatedCost || 0,
-    actual_usage: result.actualUsage,
-    generation_cost: result.estimatedCost || 0,
-    status: 'Pending Approval',
-  });
-
-  if (dbError) {
-    console.error('[CreativeEngine] Error al registrar creativo en base de datos:', dbError);
-    throw new Error('Fallo al guardar registro del creativo');
-  }
-
-  revalidatePath(`/campaigns/${campaignId}`);
-  revalidatePath('/creatives');
-  return { success: true };
 }
 
 /**

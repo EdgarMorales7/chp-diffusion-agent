@@ -30,7 +30,11 @@ export function GenerateImageButton({
       setError(null);
       setSuccess(false);
 
-      await generateCreative(campaignId, briefId, '1:1');
+      const res = await generateCreative(campaignId, briefId, '1:1');
+      if (!res.success) {
+        setError(res.error || 'Error al generar la imagen.');
+        return;
+      }
       
       setSuccess(true);
       router.refresh();
