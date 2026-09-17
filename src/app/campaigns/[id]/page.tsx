@@ -17,6 +17,7 @@ interface Strategy {
 }
 
 import { QueueGenerator } from '@/components/campaigns/QueueGenerator';
+import { GenerateImageButton } from "./GenerateImageButton";
 
 export default async function CampaignDetailPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -155,15 +156,12 @@ export default async function CampaignDetailPage(props: { params: Promise<{ id: 
                   </div>
                   <p className="text-xs text-muted-foreground">{b.visual_concept}</p>
                   
-                  <form action={async () => {
-                    'use server';
-                    const { generateCreative } = await import('@/app/creatives/actions');
-                    await generateCreative(campaign.id, b.id, '1:1');
-                  }} className="pt-1">
-                    <Button variant="secondary" size="sm" className="w-full text-xs">
-                      Generar Imagen (~${preflight.estimatedCost})
-                    </Button>
-                  </form>
+                  <GenerateImageButton
+                    campaignId={campaign.id}
+                    briefId={b.id}
+                    estimatedCost={preflight.estimatedCost}
+                    initialGeneratedCount={Array.isArray((b as Record<string, unknown>).creatives) ? ((b as Record<string, unknown>).creatives as unknown[]).length : 0}
+                  />
                 </div>
               ))}
             </CardContent>

@@ -26,7 +26,7 @@ export async function getCampaignById(id: string) {
   const [campaignRes, variantsRes, briefsRes] = await Promise.all([
     supabase.from('campaigns').select('*').eq('id', id).single(),
     supabase.from('post_variants').select('*').eq('campaign_id', id).order('created_at', { ascending: true }),
-    supabase.from('creative_briefs').select('*').eq('campaign_id', id).order('created_at', { ascending: true })
+    supabase.from('creative_briefs').select('*, creatives(*)').eq('campaign_id', id).order('created_at', { ascending: true })
   ]);
 
   if (campaignRes.error) return null;
