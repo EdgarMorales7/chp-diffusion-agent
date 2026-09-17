@@ -47,11 +47,24 @@ export async function getQueueTaskById(id: string) {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from('publication_queue')
-    .select('*, groups(*), group_rules(*), campaigns(*), post_variants(*), creatives(*, creative_briefs(*))')
+    .select('*, groups(*), campaigns(*), post_variants(*), creatives(*, creative_briefs(*))')
     .eq('id', id)
     .single();
 
-  if (error || !data) return null;
+  if (error || !data) {
+    console.error('Error fetching queue task by id:', error);
+    return null;
+  }
+
+  if (data.group_id) {
+    const { data: rules } = await supabase
+      .from('group_rules')
+      .select('*')
+      .eq('group_id', data.group_id);
+    data.group_rules = rules || [];
+  } else {
+    data.group_rules = [];
+  }
 
   if (data.creatives?.storage_path) {
     const { data: signed } = await supabase.storage.from('creatives').createSignedUrl(data.creatives.storage_path, 3600);
