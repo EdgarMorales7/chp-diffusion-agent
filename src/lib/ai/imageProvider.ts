@@ -226,12 +226,18 @@ export class ImageGenerationProvider {
         prompt: options.prompt,
         n: 1,
         size,
-        response_format: 'b64_json',
       };
 
-      // Pass quality if supported
-      if (model === 'dall-e-3' && (quality === 'standard' || quality === 'hd')) {
-        requestPayload.quality = quality;
+      if (model.includes('gpt-image') || model.includes('flare') || model.includes('sunburst')) {
+        requestPayload.output_format = options.format || 'png';
+        if (quality && ['low', 'medium', 'high', 'xhigh', 'auto'].includes(quality)) {
+          requestPayload.quality = quality;
+        }
+      } else {
+        requestPayload.response_format = 'b64_json';
+        if (model === 'dall-e-3' && (quality === 'standard' || quality === 'hd')) {
+          requestPayload.quality = quality;
+        }
       }
 
       const response = await fetch('https://api.openai.com/v1/images/generations', {
