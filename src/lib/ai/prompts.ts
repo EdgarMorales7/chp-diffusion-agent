@@ -23,7 +23,7 @@ export const PostVariantsSchema = z.object({
     angle: z.string(),
     audience: z.string(),
     explanation: z.string(), // ¿Por qué esta variante?
-  })).length(10),
+  })).min(1),
 });
 
 export const CreativeBriefsSchema = z.object({

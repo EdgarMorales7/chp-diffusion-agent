@@ -5,7 +5,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from "next/link";
-import { ChevronLeft, Sparkles } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
+
+import { SubmitButton } from "./SubmitButton";
 
 export default function NewCampaignPage() {
   return (
@@ -72,10 +74,7 @@ export default function NewCampaignPage() {
           <Link href="/campaigns">
             <Button variant="outline" type="button">Cancelar</Button>
           </Link>
-          <Button type="submit" className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white">
-            <Sparkles className="h-4 w-4" />
-            Generar Campaña Completa
-          </Button>
+          <SubmitButton />
         </div>
       </form>
     </div>

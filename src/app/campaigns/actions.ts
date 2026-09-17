@@ -83,13 +83,14 @@ export async function createCampaignWizard(formData: FormData) {
         hook: v.hook,
         body: v.body,
         cta: v.cta,
-        tone: v.tone,
         audience: v.audience,
         angle: v.angle,
         status: 'Draft',
-        // store explanation somewhere? The schema doesn't have it, but we can put it in a notes field if we added one, or we can just ignore or add it. Let's skip saving it if not in DB, or wait, we can save it in DB if we added notes to variants. 
       }));
-      await supabase.from('post_variants').insert(postsToInsert);
+      const { error: insertPostsError } = await supabase.from('post_variants').insert(postsToInsert);
+      if (insertPostsError) {
+        console.error('Error inserting post variants:', insertPostsError);
+      }
     }
 
     // 4. Generate Briefs
