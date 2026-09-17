@@ -18,11 +18,20 @@ export function QueueGenerator({ campaignId }: { campaignId: string }) {
     setLoading(true);
     setFeedback(null);
     try {
-      const results = await suggestQueueForCampaign(campaignId, 10);
-      setProposals(results);
-      setFeedback({ type: 'info', text: `Se encontraron ${results.length} coincidencias contextuales.` });
+      const res = await suggestQueueForCampaign(campaignId, 10);
+      if (!res.success) {
+        setFeedback({ type: 'error', text: res.error || 'Error al generar sugerencias.' });
+        return;
+      }
+      const proposalsList = res.proposals || [];
+      setProposals(proposalsList);
+      if (proposalsList.length === 0) {
+        setFeedback({ type: 'warning', text: 'No se encontraron coincidencias disponibles para los grupos activos.' });
+      } else {
+        setFeedback({ type: 'info', text: `Se encontraron ${proposalsList.length} coincidencias contextuales optimizadas.` });
+      }
     } catch (error: any) {
-      setFeedback({ type: 'error', text: error.message });
+      setFeedback({ type: 'error', text: error?.message || 'Error al generar sugerencias' });
     } finally {
       setLoading(false);
     }

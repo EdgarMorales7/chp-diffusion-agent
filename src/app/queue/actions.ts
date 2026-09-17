@@ -290,84 +290,125 @@ export async function getNextTask(currentId: string): Promise<string | null> {
  * AI Suggestions: Generate proposed queue tasks for a campaign.
  * Does NOT insert into DB automatically. Returns proposals for UI review.
  */
-export async function suggestQueueForCampaign(campaignId: string, limit: number = 5) {
-  const supabase = createAdminClient();
+export async function suggestQueueForCampaign(
+  campaignId: string, 
+  limit: number = 5
+): Promise<{ success: boolean; proposals?: any[]; error?: string }> {
+  try {
+    const supabase = createAdminClient();
 
-  // 1. Get campaign, approved posts, and approved creatives
-  const { data: campaign } = await supabase.from('campaigns').select('*').eq('id', campaignId).single();
-  const { data: posts } = await supabase.from('post_variants').select('*').eq('campaign_id', campaignId).in('status', ['Approved']);
-  const { data: creatives } = await supabase.from('creatives').select('*, creative_briefs(*)').eq('campaign_id', campaignId).in('status', ['Approved']);
-  
-  if (!posts || posts.length === 0 || !creatives || creatives.length === 0) {
-    throw new Error('La campaña requiere textos (posts) y creativos aprobados para generar sugerencias.');
-  }
+    // 1. Get campaign, posts, and creatives
+    const { data: campaign } = await supabase.from('campaigns').select('*').eq('id', campaignId).single();
+    
+    // Allow all post variants in this campaign
+    const { data: posts } = await supabase
+      .from('post_variants')
+      .select('*')
+      .eq('campaign_id', campaignId);
+    
+    if (!posts || posts.length === 0) {
+      return { success: false, error: 'Esta campaña no tiene textos publicitarios generados.' };
+    }
 
-  // 2. Get active groups
-  const { data: groups } = await supabase.from('groups').select('*').eq('status', 'Active');
-  if (!groups || groups.length === 0) throw new Error('No hay grupos activos.');
+    // Prioritize Approved creatives, otherwise fallback to any created creatives for this campaign
+    let { data: creatives } = await supabase
+      .from('creatives')
+      .select('*, creative_briefs(*)')
+      .eq('campaign_id', campaignId)
+      .eq('status', 'Approved');
 
-  // 3. Generate Matches
-  const proposals = [];
-  const now = new Date();
-  
-  // Basic scheduling distribution (starting tomorrow)
-  let dayOffset = 1;
+    if (!creatives || creatives.length === 0) {
+      const fallback = await supabase
+        .from('creatives')
+        .select('*, creative_briefs(*)')
+        .eq('campaign_id', campaignId);
+      creatives = fallback.data || [];
+    }
 
-  for (const group of groups) {
-    if (proposals.length >= limit) break;
+    if (!creatives || creatives.length === 0) {
+      return { 
+        success: false, 
+        error: 'Aún no hay imágenes generadas para esta campaña. Por favor genera al menos una imagen en la sección de Creative Briefs.' 
+      };
+    }
 
-    // Check rules
-    const avail = await checkGroupAvailability(group.id, new Date(now.getTime() + dayOffset * 86400000));
-    if (!avail.allowed) continue;
+    // 2. Get active groups
+    const { data: groups } = await supabase.from('groups').select('*').eq('status', 'Active');
+    if (!groups || groups.length === 0) {
+      return { 
+        success: false, 
+        error: 'No hay grupos de Facebook con estado "Active". Ve a la sección de Grupos para registrar o activar tus grupos.' 
+      };
+    }
 
-    // Find best match
-    let bestMatch = null;
-    let highestScore = -1;
+    // 3. Generate Matches
+    const proposals = [];
+    const now = new Date();
+    let dayOffset = 1;
 
-    for (const post of posts) {
-      for (const creative of creatives) {
-        const match = calculateMatchScore(group, post, creative, campaign);
-        if (match.score > highestScore) {
-          highestScore = match.score;
-          bestMatch = { post, creative, explanation: match.explanation };
+    for (const group of groups) {
+      if (proposals.length >= limit) break;
+
+      // Check rules
+      const avail = await checkGroupAvailability(group.id, new Date(now.getTime() + dayOffset * 86400000));
+      if (!avail.allowed) continue;
+
+      // Find best match
+      let bestMatch = null;
+      let highestScore = -1;
+
+      for (const post of posts) {
+        for (const creative of creatives) {
+          const match = calculateMatchScore(group, post, creative, campaign);
+          if (match.score > highestScore) {
+            highestScore = match.score;
+            bestMatch = { post, creative, explanation: match.explanation };
+          }
         }
       }
-    }
 
-    if (bestMatch) {
-      const scheduledDate = new Date(now);
-      scheduledDate.setDate(now.getDate() + dayOffset);
-      scheduledDate.setHours(10, 0, 0, 0); // 10:00 AM default
+      if (bestMatch) {
+        const scheduledDate = new Date(now);
+        scheduledDate.setDate(now.getDate() + dayOffset);
+        scheduledDate.setHours(10, 0, 0, 0); // 10:00 AM default
 
-      proposals.push({
-        groupId: group.id,
-        groupName: group.name,
-        campaignId,
-        postVariantId: bestMatch.post.id,
-        postBodyPreview: bestMatch.post.hook,
-        creativeId: bestMatch.creative.id,
-        creativePreview: bestMatch.creative.image_url,
-        storagePath: bestMatch.creative.storage_path,
-        scheduledFor: scheduledDate.toISOString(),
-        score: highestScore,
-        explanation: bestMatch.explanation,
-        warning: avail.warning ? avail.reason : null,
-      });
+        proposals.push({
+          groupId: group.id,
+          groupName: group.name,
+          campaignId,
+          postVariantId: bestMatch.post.id,
+          postBodyPreview: bestMatch.post.hook,
+          creativeId: bestMatch.creative.id,
+          creativePreview: bestMatch.creative.image_url,
+          storagePath: bestMatch.creative.storage_path,
+          scheduledFor: scheduledDate.toISOString(),
+          score: highestScore,
+          explanation: bestMatch.explanation,
+          warning: avail.warning ? avail.reason : null,
+        });
 
-      dayOffset++; // Spread them across days
-    }
-  }
-
-  // Resolve Signed URLs for proposals
-  const proposalsWithImages = await Promise.all(
-    proposals.map(async (p) => {
-      if (p.storagePath) {
-        const { data: signed } = await supabase.storage.from('creatives').createSignedUrl(p.storagePath, 3600);
-        if (signed?.signedUrl) p.creativePreview = signed.signedUrl;
+        dayOffset++; // Spread them across days
       }
-      return p;
-    })
-  );
+    }
 
-  return proposalsWithImages.sort((a, b) => b.score - a.score);
+    // Resolve Signed URLs for proposals
+    const proposalsWithImages = await Promise.all(
+      proposals.map(async (p) => {
+        if (p.storagePath) {
+          const { data: signed } = await supabase.storage.from('creatives').createSignedUrl(p.storagePath, 3600);
+          if (signed?.signedUrl) p.creativePreview = signed.signedUrl;
+        }
+        return p;
+      })
+    );
+
+    return { 
+      success: true, 
+      proposals: proposalsWithImages.sort((a, b) => b.score - a.score) 
+    };
+  } catch (error: unknown) {
+    console.error('[QueueActions] Error en suggestQueueForCampaign:', error);
+    const msg = error instanceof Error ? error.message : 'Error inesperado al generar sugerencias de cola';
+    return { success: false, error: msg };
+  }
 }
